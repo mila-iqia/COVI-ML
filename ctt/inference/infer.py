@@ -1,5 +1,6 @@
 import os
 from speedrun import BaseExperiment
+import warnings
 
 from ctt.data_loading.loader import ContactPreprocessor
 from ctt.models.transformer import ContactTracingTransformer
@@ -23,10 +24,12 @@ class InferenceEngine(BaseExperiment):
 
     def load(self):
         path = os.path.join(self.checkpoint_directory, "best.ckpt")
-        assert os.path.exists(path)
-        state = torch.load(path, map_location=torch.device("cpu"))
-        self.model.load_state_dict(state["model"])
-        self.model.eval()
+        if os.path.exists(path):
+            state = torch.load(path, map_location=torch.device("cpu"))
+            self.model.load_state_dict(state["model"])
+            self.model.eval()
+        else:
+            warnings.warn("No model checkpoint found", RuntimeWarning)
         return self
 
     def infer(self, human_day_info):
