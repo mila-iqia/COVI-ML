@@ -55,7 +55,9 @@ unzip <data-file-name>.zip data
 
 ### Dependencies
 
-To install the dependencies, simply `pip install -r requirements.txt` and you're all set. 
+To install the dependencies, simply `pip install .` and you're all set. If you also want to run the project with TensorFlow, you can instead run `pip install '.[tensorflow]'`.
+
+Please checkout `setup.py` for external dependencies.
 
 ### Train the transformer model
 
