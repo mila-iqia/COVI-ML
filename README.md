@@ -1,4 +1,4 @@
-# COVI-ml
+# COVI-ML
 
 This repository provides models, infrastructure and datasets for training deep-learning based predictors of COVID-19 infectiousness as used in [Proactive Contact Tracing](TODO). 
 
