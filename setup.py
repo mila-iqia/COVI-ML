@@ -7,7 +7,7 @@ with open('requirements.txt', 'r') as f:
 setup(
     name='ctt',
     version='0.1',
-    packages=['ctt', 'ctt.frozen', 'ctt.models', 'ctt.serving', 'ctt.inference', 'ctt.conversion', 'ctt.data_loading'],
+    packages=['ctt', 'ctt.models', 'ctt.inference', 'ctt.conversion', 'ctt.data_loading'],
     url='https://github.com/nasimrahaman/ctt',
     license='MIT',
     author='Nasim Rahaman',

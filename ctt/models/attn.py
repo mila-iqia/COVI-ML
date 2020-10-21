@@ -8,6 +8,7 @@ import math
 
 class MAB(nn.Module):
     EPS = 1e-7
+    TF_COMPAT = False
 
     def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
         super(MAB, self).__init__()
@@ -31,7 +32,15 @@ class MAB(nn.Module):
         V_ = torch.cat(V.split(dim_split, 2), 0)
 
         A = self._compute_attention_weights(Q_, K_, weights)
-        O = torch.cat((Q_ + A.bmm(V_)).split(Q.size(0), 0), 2)
+        # funky split spaghetti to avoid pytorch call overload issues
+        split_size = Q.size(0)
+        if self.TF_COMPAT:
+            # ONNX doesn't like split() being called on non-constant inputs.
+            split_size = int(split_size)
+        elif not isinstance(split_size, torch.Tensor):
+            split_size = torch.IntTensor([split_size])[0]
+        # split will still throw a tracing warning, but we can't avoid the int conversion...
+        O = torch.cat(super(torch.Tensor, Q_ + A.bmm(V_)).split(split_size, dim=0), 2)
         O = O if getattr(self, "ln0", None) is None else self.ln0(O)
         O = O + F.relu(self.fc_o(O))
         O = O if getattr(self, "ln1", None) is None else self.ln1(O)
@@ -49,7 +58,7 @@ class MAB(nn.Module):
             weights = torch.cat(weights, dim=0)
             assert weights.shape[0] == Q_.shape[0]
             # Log and clamp weights
-            log_weights = torch.log(weights.clamp_min(0.) + self.EPS)
+            log_weights = torch.log(weights.clamp_min(0.0) + self.EPS)
             attention_scores = Q_.bmm(K_.transpose(1, 2)) / math.sqrt(self.dim_V)
             A = torch.softmax(attention_scores + log_weights, 2)
         return A
@@ -86,3 +95,93 @@ class PMA(nn.Module):
 
     def forward(self, X, weights=None):
         return self.mab(self.S.repeat(X.size(0), 1, 1), X, weights)
+
+
+class SRB(nn.Module):
+    """Set Residual Block"""
+
+    def __init__(self, dim_in, dim_out, feature_size=None, aggregation="max"):
+        super(SRB, self).__init__()
+        feature_size = feature_size or dim_in
+        self.fc_i = nn.Linear(dim_in, feature_size)
+        self.fc_f = nn.Linear(feature_size + dim_in, dim_in)
+        self.fc_o = nn.Linear(dim_in, dim_out)
+        self.aggregation = aggregation
+
+    def forward(self, X, weights=None):
+        if weights is not None:
+            mask = weights.gt(0.0)
+        else:
+            mask = None
+        num_entities = X.shape[1]
+        global_features = F.relu(self.fc_i(X))
+        if self.aggregation == "max":
+            if mask is not None:
+                global_features = global_features.masked_fill(
+                    (~mask)[..., None].expand_as(global_features), -float("inf")
+                )
+            global_features = global_features.max(1, keepdim=True).values.repeat(
+                1, num_entities, 1
+            )
+        elif self.aggregation == "sum":
+            if mask is not None:
+                global_features = global_features.masked_fill(
+                    (~mask)[..., None].expand_as(global_features), 0.0
+                )
+            global_features = global_features.sum(1, keepdim=True).repeat(
+                1, num_entities, 1
+            )
+        elif self.aggregation == "mean":
+            if mask is not None:
+                global_features = global_features.masked_fill(
+                    (~mask)[..., None].expand_as(global_features), 0.0
+                )
+            global_features = global_features.mean(1, keepdim=True).repeat(
+                1, num_entities, 1
+            )
+            if mask is not None:
+                # The mean divides by M, where M is the number of entities.
+                # However, some of those M entities may have been padding and
+                # accordingly set to 0. This affects the mean, so we undo
+                # that here.
+                normalizer = num_entities / mask.sum(1).float()
+                global_features = global_features * normalizer[:, None, None]
+        elif self.aggregation == "none":
+            # Do not aggregate
+            pass
+        else:
+            raise NotImplementedError
+        Y = F.relu(self.fc_f(torch.cat([X, global_features], dim=-1))) + X
+        Y = F.relu(self.fc_o(Y))
+        return Y
+
+
+class ResLinearReLU(nn.Module):
+    """Fully Connected Residual Block"""
+    def __init__(self, dim):
+        super(ResLinearReLU, self).__init__()
+        self.fc = nn.Linear(dim, dim)
+
+    def forward(self, X):
+        X = F.relu(self.fc(X)) + X
+        return X
+
+
+class ResDoubleLinearReLU(nn.Module):
+    def __init__(self, dim):
+        super(ResDoubleLinearReLU, self).__init__()
+        self.fc1 = nn.Linear(dim, dim // 2)
+        self.fc2 = nn.Linear(dim // 2, dim)
+
+    def forward(self, X):
+        hidden = F.relu(self.fc1(X))
+        output = F.relu(self.fc2(hidden)) + X
+        return output
+
+
+class LinearReLU(nn.Linear):
+    def __init__(self, dim_in, dim_out):
+        super(LinearReLU, self).__init__(dim_in, dim_out)
+
+    def forward(self, X):
+        return F.relu(super(LinearReLU, self).forward(X))
