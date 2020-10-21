@@ -11,7 +11,7 @@ We provide [architectural scaffolding](ctt/models/transformers/msn.py#L36) aroun
 The core training infrastructure is built with [speedrun](https://github.com/inferno-pytorch/speedrun). It supports experiment tracking with [Weights and Biases](https://www.wandb.com) & [tensorboard](https://www.tensorflow.org/tensorboard), and hyperparameter sweeps with [Weights and Biases Sweeps](https://www.wandb.com/sweeps).
 
 ### Datasets
-The training data is derived from [COVI-sim](TODO), an agent based simulator built with contact-tracing benchmarking and epidemiological realism in mind. We will include a dataset (download to appear soon); but in the mean time, you can print your own datasets by following instructions in the [COVI-sim repository](TODO).
+The training data is derived from [COVI-AgentSim](https://github.com/mila-iqia/COVI-AgentSim), an agent based simulator built with contact-tracing benchmarking and epidemiological realism in mind. We will include a dataset (download to appear soon); but in the mean time, you can print your own datasets by following instructions in the [COVI-AgentSim repository](https://github.com/mila-iqia/COVI-AgentSim).
 
 The training and validation data is structured in directories containing [zarr](https://zarr.readthedocs.io/en/stable/) datasets. There is some flexibility here (see below), but we expect two directories `./data/train` and `./data/val`, where each directory should contain an arbitrary number of zarr files.      
 
